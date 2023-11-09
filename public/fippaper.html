@@ -108,7 +108,6 @@
     <div id="teamCursor" class="cursor black"></div>
     <div class="container">
             <div class="col-10">
-                <p id="dataTextArea" style="text-align: center; font-size: 20px; "></p> 
                 <p id="PlayerTextArea" style="text-align: center; font-size: 20px;"></p>
                 <div class="centered">
                     <div id="teamButtons centeredDiv">
@@ -116,10 +115,10 @@
                         <button id="blueTeamButton" class="team-button blue-button" onclick="selectTeam('blue')">파란 팀</button>
                     </div>
                 </div>
-                <!-- <p id="teamTextArea" style="text-align: center; margin: 20px;"></p>
+                <p id="teamTextArea" style="text-align: center; margin: 20px;"></p>
                 <div class="container">
                     <div class="big-square" id="bigSquare"></div>
-                </div> -->
+                </div>
             </div>
             <!-- <div class="col-2">
                 <p id="timeTextArea" style="text-align: center; height: 30%; font-size: 20px;"></p> 
@@ -132,6 +131,18 @@
         const newCursor = document.getElementById("teamCursor");
         let posX = 0;
         let posY = 0;
+        var team_color = {"0" : -1, "1" : -1};
+        var mygame = -1;
+        var game_status = -1;
+
+        // Status라는 Json에 담을 상수
+        var connectStatus = 0;
+        var teamWhereStatus = 1;
+        var finish_team = 2;
+        var squareStatus = 3;
+        var game_start  = 4;
+        var new_player = 5;
+
 
         document.addEventListener("DOMContentLoaded", () => {
             // 마우스 움질일 때의 이벤트
@@ -147,22 +158,45 @@
             }
         });
 
+
+        socket = new WebSocket("ws://" + window.location.host + "/ws");
+
         // 웹 소켓 처음 열렸을때 확인하는곳
         socket.onopen = function (e) {
             console.log("웹 소켓 연결이 열렸습니다.", arguments);
-            let data = {};
-            
-            data.status = connectStatus;
-            socket.send(`${JSON.stringify(data)}`);
+            socket.send(JSON.stringify({ status: connectStatus }));
         };
         
         // 서버에서 MyClientID를 받아서 설정
         socket.onmessage = function (e) {
             var jsonData = JSON.parse(e.data);
-            document.addEventListener("DOMContentLoaded", () => {
-                connect_data(jsonData);
-                square(jsonData);
-            });
+
+            window.onload = function(){
+                if(jsonData.status == connectStatus){
+                    console.log(jsonData);
+                    connect_data(jsonData);
+                }
+            }
+            if(jsonData.status == teamWhereStatus){
+                console.log("team설정 데이터 들어옵니다.");
+                team_color = jsonData.team_color;
+                teamSelect(team_color);
+            //////////////////////////////플레이어 이지 확인해주기 위해서 토글 해주는 부분
+            }else if(jsonData.status == game_start){
+                // 게임 번호를 받아오기
+                game_status = jsonData.game_id;
+                mygame = jsonData.team;
+                console.log("몇번째 게임인지 : ", mygame);
+            }else if(jsonData.status == new_player){
+                if(game_status == jsonData.game_id){
+                    console.log("게임이 시작됩니다.");
+                    createsquare(jsonData);
+                }else{
+                    teamremove(jsonData);
+                }
+            }else if(jsonData.status == squareStatus){
+                gameSquare(jsonData);
+            }
         };
 
         // 소켓 닫히는 곳
@@ -184,6 +218,7 @@
             // 새로고침 또는 페이지를 떠날 때 WebSocket 연결을 닫습니다.
             socket.close();
         });
+        
     </script>
 </body>
 </html>

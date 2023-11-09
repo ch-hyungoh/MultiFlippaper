@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"multiflippaper/go_func"
+
+	"std/github.com/ch-hyungoh/MultiFlippaper/go_func"
 
 	"github.com/gorilla/websocket"
 )
@@ -16,18 +17,30 @@ var upgrader = websocket.Upgrader{
 
 var clients = make(map[*websocket.Conn]int)
 var maxClientID = 0
+var boardID = 0
 
 var connectStatus = 0
-var playStatus = 1
-var teamWhereStatus = 2
-var SquarStatus = 3
+var teamWhereStatus = 1
+var finish_team = 2
+var squareStatus = 3
+var game_start = 4
+var new_player = 5
 
 var team_color = map[int]int{
 	0: -1,
 	1: -1,
 }
 
-var team_square = map[int]int{
+var reset_team_color = map[int]int{
+	0: -1,
+	1: -1,
+}
+
+var game_board = make(([][]interface{}), 0)
+
+var player_board = make(([][]interface{}), 0)
+
+var game_square = map[int]int{
 	1:  0,
 	2:  1,
 	3:  0,
@@ -67,6 +80,20 @@ func addClient(client *websocket.Conn) int {
 	return clients[client]
 }
 
+// 팀원들이 모이면 새로운 게임판과 인원이 추가 시켜준다.
+func addGame_Board(player1 int, player2 int) int {
+	// 새 항목을 만들어 game_board에 추가
+	boardID = boardID + 1
+
+	newplayer := []interface{}{player1, player2, boardID}
+	player_board = append(player_board, newplayer)
+
+	newboard := []interface{}{game_square, boardID}
+	game_board = append(game_board, newboard)
+
+	return boardID
+}
+
 func removeClient(smallestClients []int, client *websocket.Conn) {
 	for client := range clients {
 		log.Println(client, smallestClients)
@@ -77,31 +104,9 @@ func removeClient(smallestClients []int, client *websocket.Conn) {
 	}
 }
 
-/////////////////////////////////////////////////////////////
-// 방에 2명이 들어오면 2명을 묶어서 게임 시작하게 해주기 수정해야함
-/////////////////////////////////////////////////////////////
-
-func getClientIDs(clients map[*websocket.Conn]int) []int {
-	// 클라이언트 번호만 모아둘 슬라이스 생성
-	clientIDs := make([]int, 0)
-
-	// 모든 클라이언트 번호를 슬라이스에 추가
-	for _, clientID := range clients {
-		clientIDs = append(clientIDs, clientID)
-	}
-
-	// 슬라이스에서 가장 작은 2개의 클라이언트 번호 선택
-	var smallest1, smallest2 int
-	if len(clientIDs) > 0 {
-		smallest1 = clientIDs[0]
-		if len(clientIDs) > 1 {
-			smallest2 = clientIDs[1]
-		}
-	}
-
-	return []int{smallest1, smallest2}
-}
-
+// /////////////////////////////////////////////////////
+// //////웹 서버 실행시켜 주는 부분///////////////////////
+// /////////////////////////////////////////////////////
 func startHTTPServer() {
 	http.Handle("/", http.FileServer(http.Dir("public")))
 }
@@ -123,11 +128,20 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 클라이언트와 연결된 후에 데이터를 전송합니다.
+	var initialData = map[string]interface{}{
+		"msg": "시작하자말자 갑니다",
+	}
+	if err := ws.WriteJSON(initialData); err != nil {
+		log.Printf("Error writing initial data: %v", err)
+		return
+	}
 	defer ws.Close()
+
+	addClient(ws)
 
 	for {
 		_, msg, err := ws.ReadMessage()
-
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 				log.Println("WebSocket 연결이 정상적으로 닫혔습니다.")
@@ -136,6 +150,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 			break
 		}
+
 		// msg를 문자열로 변환
 		msgStr := string(msg)
 
@@ -149,8 +164,110 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if jsonData["status"] == float64(connectStatus) {
-			connectfunc.Connectfunc(jsonData)
+			go_func.Connectfunc(team_color, jsonData)
+			ws.WriteJSON(jsonData)
+		} else if jsonData["status"] == float64(teamWhereStatus) {
+			team := jsonData["team"].(string)
+
+			teamselect := true
+			for _, colorvalue := range team_color {
+				if colorvalue == clients[ws] {
+					teamselect = false
+				}
+			}
+
+			if teamselect {
+
+				team_color = go_func.TeamWherefunc(clients[ws], team_color, team)
+				jsonData["team_color"] = team_color
+				jsonData["team"] = team
+
+				ws.WriteJSON(jsonData)
+
+				for client := range clients {
+					err := client.WriteJSON(jsonData)
+					if err != nil {
+						log.Printf("Error broadcasting message: %v", err)
+					}
+				}
+
+				// 팀 선택 인원이 모두 정해지면 게임 시작되거나 다시 구하기
+				if team_color[0] != -1 && team_color[1] != -1 {
+					log.Println("///////////////////////게임이 시작되었습니다.")
+					game_id := addGame_Board(team_color[0], team_color[1])
+
+					count := 0
+
+					for nowws, teamValue := range clients {
+						for _, colorValue := range team_color {
+							if teamValue == colorValue {
+								jsonData["team"] = colorValue
+								jsonData["status"] = game_start
+								jsonData["game_id"] = game_id
+								nowws.WriteJSON(jsonData)
+								count += 1
+							}
+						}
+						if count == 2 {
+							break
+						}
+					}
+
+					for key, value := range reset_team_color {
+						team_color[key] = value
+
+					}
+
+					jsonData["status"] = new_player
+					jsonData["game_square"] = game_square
+					jsonData["now_game"] = game_id
+
+					for client := range clients {
+						err := client.WriteJSON(jsonData)
+						if err != nil {
+							log.Printf("Error broadcasting message: %v", err)
+						}
+					}
+					log.Println(game_board)
+				}
+			}
+		} else if jsonData["status"] == float64(squareStatus) {
+			squareNumber := int(jsonData["number"].(float64))
+			game_number := int(jsonData["game_status"].(float64))
+
+			if int(jsonData["team"].(float64)) == game_board[game_number][squareNumber] {
+				if game_board[game_number][squareNumber] == 0 {
+					game_board[game_number][squareNumber] = 1
+				} else {
+					game_board[game_number][squareNumber] = 0
+				}
+			}
+
+			log.Println(game_board[game_number])
+			// score := 0
+
+			// for _, value := range game_board[game_number] {
+			// 	score += value
+			// }
+
+			// log.Println(score)
+
+			jsonData["status"] = float64(squareStatus)
+			jsonData["game_status"] = game_number
+			jsonData["game_square"] = game_board[game_number]
+			// jsonData["score"] = score
+			for client := range clients {
+				err := client.WriteJSON(jsonData)
+				if err != nil {
+					log.Printf("Error broadcasting message: %v", err)
+				}
+			}
 		}
 	}
 
+}
+
+func main() {
+	go startHTTPServer()
+	startWebSocketServer()
 }
