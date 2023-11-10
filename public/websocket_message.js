@@ -56,13 +56,13 @@ function gameSquare(jsonData){
     // console.log(jsonData.g_square);
     var gSquareValues = jsonData.game_square;
 
-    // bluescore = jsonData.score;
+    bluescore = jsonData.score;
 
-    // var redscoreArea = document.getElementById('redscoreArea');
-    // redscoreArea.textContent = "레드팀 점수 : " + (25 - bluescore); 
+    var redscoreArea = document.getElementById('redscoreArea');
+    redscoreArea.textContent = "레드팀 점수 : " + (25 - bluescore); 
 
-    // var bluescoreArea = document.getElementById('bluescoreArea');
-    // bluescoreArea.textContent = "블루팀 점수 : " + bluescore; 
+    var bluescoreArea = document.getElementById('bluescoreArea');
+    bluescoreArea.textContent = "블루팀 점수 : " + bluescore; 
 
     for (var i = 1; i <= 25; i++) {
         // var square = document.getElementsByClassName('square' + i);
@@ -85,11 +85,17 @@ function gameSquare(jsonData){
 // 팀 선택 버튼을 눌렸을때
 function selectTeam(team) {
     // MyClientID도 함께 보내고 싶으면 아래와 같이 처리할 수 있습니다
+    
+    if (team == "red"){
+        myteam = 0
+    }else{
+        myteam = 1
+    }
     socket.send(JSON.stringify({ status : teamWhereStatus, team : team}));
 }
 
 // 사각형을 눌렸을때
 function selectsquare(number){
     number = parseInt(number, 10);
-    socket.send(JSON.stringify({ status : squareStatus, game_status: game_status, team : team, number: number }));
+    socket.send(JSON.stringify({ status : squareStatus, game_status: game_status, myteam : myteam, number: number }));
 }

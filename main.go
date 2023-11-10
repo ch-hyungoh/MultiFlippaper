@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"std/github.com/ch-hyungoh/MultiFlippaper/go_func"
 
@@ -39,6 +41,8 @@ var reset_team_color = map[int]int{
 var game_board = make(([][]interface{}), 0)
 
 var player_board = make(([][]interface{}), 0)
+
+var game_timer = make(([][]interface{}), 0)
 
 var game_square = map[int]int{
 	1:  0,
@@ -88,8 +92,15 @@ func addGame_Board(player1 int, player2 int) int {
 	newplayer := []interface{}{player1, player2, boardID}
 	player_board = append(player_board, newplayer)
 
-	newboard := []interface{}{game_square, boardID}
-	game_board = append(game_board, newboard)
+	// 게임 판 얕은 복사로 만들어 주기
+	copiedMap := make(map[int]int)
+
+	// 원본 map의 모든 키-값 쌍을 복사
+	for key, value := range game_square {
+		copiedMap[key] = value
+	}
+
+	game_board = append(game_board, []interface{}{copiedMap})
 
 	return boardID
 }
@@ -102,6 +113,15 @@ func removeClient(smallestClients []int, client *websocket.Conn) {
 		// 클라이언트가 존재하는 경우에만 삭제
 		delete(clients, client)
 	}
+}
+
+// 1초 슬립해서 줄어드는 타이머
+func countdownTimer() {
+	for i := 30; i >= 0; i-- {
+		fmt.Printf("%d초\n", i)
+		time.Sleep(1 * time.Second)
+	}
+	fmt.Println("타이머 종료")
 }
 
 // /////////////////////////////////////////////////////
@@ -233,33 +253,43 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 		} else if jsonData["status"] == float64(squareStatus) {
 			squareNumber := int(jsonData["number"].(float64))
-			game_number := int(jsonData["game_status"].(float64))
+			game_status := int(jsonData["game_status"].(float64))
+			game_team := int(jsonData["myteam"].(float64))
 
-			if int(jsonData["team"].(float64)) == game_board[game_number][squareNumber] {
-				if game_board[game_number][squareNumber] == 0 {
-					game_board[game_number][squareNumber] = 1
-				} else {
-					game_board[game_number][squareNumber] = 0
-				}
+			a := game_board[game_status-1][0]
+			aMap := a.(map[int]int)
+
+			// 눌렸을 경우 그 팀으로 변경해준다.
+			aMap[squareNumber] = game_team
+
+			// 스코어
+			score := 0
+
+			for _, value := range aMap {
+				score += value
 			}
 
-			log.Println(game_board[game_number])
-			// score := 0
-
-			// for _, value := range game_board[game_number] {
-			// 	score += value
-			// }
-
-			// log.Println(score)
-
 			jsonData["status"] = float64(squareStatus)
-			jsonData["game_status"] = game_number
-			jsonData["game_square"] = game_board[game_number]
-			// jsonData["score"] = score
-			for client := range clients {
-				err := client.WriteJSON(jsonData)
-				if err != nil {
-					log.Printf("Error broadcasting message: %v", err)
+			jsonData["game_status"] = game_status
+			jsonData["game_square"] = aMap
+			jsonData["score"] = score
+
+			log.Println(clients)
+			log.Println(clients[ws])
+			log.Println(player_board[game_status-1])
+
+			originalSlice := player_board[game_status-1]
+			newSlice := originalSlice[:len(originalSlice)-1]
+
+			// 현재 게임보드에 있는 플레이어에게만 게임판 정보를 준다.
+			for client, value := range clients {
+				for _, val := range newSlice {
+					if value == val {
+						err := client.WriteJSON(jsonData)
+						if err != nil {
+							log.Printf("Error broadcasting message: %v", err)
+						}
+					}
 				}
 			}
 		}
