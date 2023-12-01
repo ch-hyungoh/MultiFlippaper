@@ -101,6 +101,9 @@
     .blue {
         background-color: blue;
     }
+    .display_none {
+        display : none
+    }
 </style>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
 <script src="websocket_message.js"></script>
@@ -143,6 +146,7 @@
         var squareStatus = 3;
         var game_start  = 4;
         var new_player = 5;
+        var timerStatus = 6
 
 
         document.addEventListener("DOMContentLoaded", () => {
@@ -185,16 +189,27 @@
             //////////////////////////////플레이어 이지 확인해주기 위해서 토글 해주는 부분
             }else if(jsonData.status == game_start){
                 // 게임 번호를 받아오기
-                game_status = jsonData.game_id;
+                game_status = jsonData.game_status;
                 mygame = jsonData.team;
                 console.log("몇번째 게임인지 : ", mygame);
+
+                var centeredElements = document.getElementsByClassName('centered');
+
+                if (centeredElements.length > 0) {
+                    // 여러 요소가 있다면 forEach 등을 사용하여 각각에 대해 작업해야 합니다.
+                    centeredElements[0].classList.add('display_none');
+                } else {
+                    console.error("Class 'centered'를 가진 요소를 찾을 수 없습니다.");
+                }
             }else if(jsonData.status == new_player){
-                if(game_status == jsonData.game_id){
+                if(game_status == jsonData.game_status){
                     console.log("게임이 시작됩니다.");
                     createsquare(jsonData);
                 }else{
                     teamremove(jsonData);
                 }
+                console.log(game_status);
+                socket.send(JSON.stringify({ status : timerStatus, game_status: game_status}));
             }else if(jsonData.status == squareStatus){
                 console.log(jsonData.game_square);
                 gameSquare(jsonData, myteam);

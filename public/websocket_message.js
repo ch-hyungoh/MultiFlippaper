@@ -85,11 +85,14 @@ function gameSquare(jsonData){
 // 팀 선택 버튼을 눌렸을때
 function selectTeam(team) {
     // MyClientID도 함께 보내고 싶으면 아래와 같이 처리할 수 있습니다
-    
     if (team == "red"){
         myteam = 0
+        document.getElementById('teamCursor').classList.remove('black');
+        document.getElementById('teamCursor').classList.add('red');
     }else{
         myteam = 1
+        document.getElementById('teamCursor').classList.remove('black');
+        document.getElementById('teamCursor').classList.add('blue');
     }
     socket.send(JSON.stringify({ status : teamWhereStatus, team : team}));
 }
